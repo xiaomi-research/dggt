@@ -89,7 +89,7 @@ def main():
     parser.add_argument('-images', action='store_true', help='Whether to output each frame image')
     parser.add_argument('-depth', action='store_true', help='Whether to output each frame depth as .npy')
     parser.add_argument('-metrics', action='store_true', help='Whether to output evaluation metrics')
-    parser.add_argument('-difix', action='store_true', help='Whether to process images with difix')
+    parser.add_argument('-diffusion', action='store_true', help='Whether to process images with diffusion model')
     parser.add_argument('--intervals', type=int, default=2, help='Interval for mode=3')
     args = parser.parse_args()
     os.makedirs(args.output_path, exist_ok=True)

@@ -85,14 +85,49 @@ if __name__ == "__main__":
             raise ValueError("scene_list_file is required for non-nuscenes dataset")
         if not os.path.exists(args.scene_list_file):
             raise ValueError(f"scene_list_file {args.scene_list_file} does not exist")
-        scene_lists = open(args.scene_list_file, "r").read().splitlines()
-        if np.max(scene_ids) >= len(scene_lists):
-            scene_ids = [scene_id for scene_id in scene_ids if scene_id < len(scene_lists)]
-        scene_lists = [(i, scene_lists[i]) for i in scene_ids]
+
+        # Read the scene list file. If it's empty, fall back to scanning the data_root
+        # for .tfrecord files (prefer `data_root/<split>/`), sort lexicographically,
+        # and use those basenames (without .tfrecord) as scene names.
+        raw_lines = open(args.scene_list_file, "r").read().splitlines()
+        if len(raw_lines) == 0:
+            import glob
+
+            candidate_dir = os.path.join(args.data_root, args.split)
+            tf_files = []
+            if os.path.isdir(candidate_dir):
+                tf_files = sorted(glob.glob(os.path.join(candidate_dir, "*.tfrecord")))
+
+            # fallback: recursive search under data_root
+            if len(tf_files) == 0:
+                tf_files = sorted(glob.glob(os.path.join(args.data_root, "**", "*.tfrecord"), recursive=True))
+
+            if len(tf_files) == 0:
+                raise ValueError(
+                    f"scene_list_file {args.scene_list_file} is empty and no .tfrecord files were found under {candidate_dir} or {args.data_root}"
+                )
+
+            scene_names = [os.path.splitext(os.path.basename(p))[0] for p in tf_files]
+            print(
+                f"scene_list_file {args.scene_list_file} is empty; discovered {len(scene_names)} tfrecord files under data_root. Using lexicographic order."
+            )
+        else:
+            scene_names = raw_lines
+
+        # Build scene_lists as list of (index, scene_name) based on requested scene_ids
+        # If user did not provide --scene_ids (args.scene_ids is None), treat it as
+        # "process all discovered scenes" and use the full range [0..N-1].
+        if args.scene_ids is None:
+            valid_scene_ids = list(range(len(scene_names)))
+        else:
+            valid_scene_ids = [int(sid) for sid in scene_ids if int(sid) >= 0 and int(sid) < len(scene_names)]
+            if len(valid_scene_ids) == 0:
+                raise ValueError("No valid scene ids found in the requested range after checking available scenes.")
+        scene_lists = [(i, scene_names[i]) for i in valid_scene_ids]
         print(f"scene_lists: {scene_lists}")
 
     if args.dataset == "waymo":
-        from datasets.waymo_preprocess_storm import WaymoProcessor
+        from datasets.waymo.waymo_preprocess_ import WaymoProcessor 
 
         dataset_processor = WaymoProcessor(
             load_dir=args.data_root,

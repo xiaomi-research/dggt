@@ -52,7 +52,7 @@ This codebase provides support for Waymo Open Dataset, Nuscenes and Argoverse2. 
 ## Installation
 ### Installing dependencies
 
-1. Data preprocess
+1. Create conda environment
 ```bash
 conda create -n dggt python=3.10
 conda activate dggt
@@ -94,8 +94,8 @@ python inference.py \
     --output_path /path/to/output \
     -images \
     -depth \
-    -metrics \
-    -difix
+    -diffusion \
+    -metrics 
 ```
     --image_dir <path>: Specifies the directory containing the input images (required).
     --scene_names <names>: A string representing the scene names to process, supporting formats like 3 5 7 or "(3,7)" (required).
@@ -109,7 +109,7 @@ python inference.py \
     -images: A flag that, when specified, enables the output of rendered images for each frame (optional).
     -depth: A flag that, when specified, enables the output of depth maps in .npy format for each frame (optional).
     -metrics: A flag that, when specified, enables the output of evaluation metrics (PSNR, SSIM, LPIPS) after processing (optional).
-    -difix: Whether to use difix to optimize the rendered images (time-consuming) (optional).
+    -diffusion: Whether to use diffusion model to optimize the rendered images (time-consuming) (optional).
 
 
 ### Zero-shot and trained experiment​s

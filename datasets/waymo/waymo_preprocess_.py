@@ -11,7 +11,7 @@ from tqdm import tqdm, trange
 from waymo_open_dataset.utils import frame_utils
 parse_range_image_and_camera_projection = frame_utils.parse_range_image_and_camera_projection
 
-from storm.visualization.visualization_tools import depth_visualizer, scene_flow_to_rgb
+from .visualization import depth_visualizer, scene_flow_to_rgb
 
 from .utils import track_parallel_progress
 
@@ -532,100 +532,6 @@ class WaymoProcessor:
             if "ground" in self.process_keys:
                 self.save_ground(frame, file_id, frame_id)
         self.make_json(file_id)
-        # save a video
-        downsample_factor = self.downsample_factors[-1]
-        scene_id = f"{scene_id:03d}"
-        video_path = f"{self.json_folder_to_save.replace('annotations', 'video_preview')}/{scene_id}-{self.scene_names[file_id].split('segment-')[1].split('_')[0]}.mp4"
-        os.makedirs(os.path.dirname(video_path), exist_ok=True)
-        scene_path = f"{self.save_dir}/{scene_id}"
-        video_frames = []
-        for frame_id in trange(num_frames, desc=f"Making video {scene_id}", dynamic_ncols=True):
-            frame = []
-            for cam_id in [3, 1, 0, 2, 4]:
-                image_path = (
-                    f"{scene_path}/images_{downsample_factor}/"
-                    + f"{str(frame_id).zfill(3)}_{str(cam_id)}.jpg"
-                )
-                image = Image.open(image_path).convert("RGB")
-                depth_flows_path = (
-                    f"{scene_path}/depth_flows_{downsample_factor}/"
-                    + f"{str(frame_id).zfill(3)}_{str(cam_id)}.npy"
-                )
-                ground_path = image_path.replace("images", "ground_label").replace("jpg", "png")
-                ground_mask = np.array(Image.open(ground_path))
-
-                depth_flows = np.load(depth_flows_path)
-                depth_image = depth_flows[:, :, 0]
-                flow_image = depth_flows[:, :, 1:4]
-                depth_img = depth_visualizer(depth_image, depth_image > 0)
-                flow_img = scene_flow_to_rgb(flow_image, flow_max_radius=15)
-
-                img_array = np.array(image) / 255.0
-                # Prepare the ground mask and image for blending
-                ground_mask = (
-                    np.expand_dims(ground_mask, axis=-1) / 255.0
-                )  # Normalize mask to [0, 1]
-
-                # Ensure ground_mask is binary (0 or 1), just in case the values are not exactly 0 or 255
-                ground_mask = np.where(ground_mask > 0.5, 1, 0)  # Threshold the mask at 0.5
-
-                # Blending the image using the ground mask
-                # If ground_mask == 1 -> blend with 30% gray
-                # If ground_mask == 0 -> keep the original image
-                gray_value = 0.3  # Gray color value (30%)
-                img_array = img_array * (1 - ground_mask) + ground_mask * gray_value
-
-                depth_img = np.array(depth_img)
-                flow_img = np.array(flow_img)
-                # if img_array.shape[0] != 160:
-                #     _img_array = np.zeros((160, 240, 3))
-                #     _img_array[50:] = img_array
-                #     img_array = _img_array
-
-                #     _depth_img = np.zeros((160, 240, 3))
-                #     _depth_img[50:] = depth_img
-                #     depth_img = _depth_img
-
-                #     _flow_img = np.zeros((160, 240, 3))
-                #     _flow_img[50:] = flow_img
-                #     flow_img = _flow_img
-
-                # img_array = np.concatenate([img_array, depth_img, flow_img], axis=0)
-                def resize_to(arr, shape):
-                    # arr: np.ndarray, shape: (h, w, 3)
-                    # shape: (h, w)
-                    if arr.shape[0:2] == shape:
-                        return arr
-                    return np.array(Image.fromarray((arr * 255).astype(np.uint8)).resize((shape[1], shape[0]), Image.BILINEAR)) / 255.0
-
-                target_h, target_w = 110, 240
-                full_h = 160
-
-                if img_array.shape[0] != full_h or img_array.shape[1] != target_w:
-                    img_array_rs = resize_to(img_array, (target_h, target_w))
-                    _img_array = np.zeros((full_h, target_w, 3))
-                    _img_array[full_h - target_h:] = img_array_rs
-                    img_array = _img_array
-
-                    depth_img_rs = resize_to(depth_img, (target_h, target_w))
-                    _depth_img = np.zeros((full_h, target_w, 3))
-                    _depth_img[full_h - target_h:] = depth_img_rs
-                    depth_img = _depth_img
-
-                    flow_img_rs = resize_to(flow_img, (target_h, target_w))
-                    _flow_img = np.zeros((full_h, target_w, 3))
-                    _flow_img[full_h - target_h:] = flow_img_rs
-                    flow_img = _flow_img
-
-                img_array = np.concatenate([img_array, depth_img, flow_img], axis=0)
-
-                frame.append((img_array * 255).astype(np.uint8))
-            frame = np.concatenate(frame, axis=1)
-            video_frames.append(frame)
-        video_frames = np.stack(video_frames)
-        # imageio.mimwrite(video_path, video_frames, fps=10)
-        imageio.mimwrite(video_path, video_frames, fps=10, codec="libx264", quality=4)
-        print(f"Scene {scene_id} video saved to {video_path}")
 
     def make_json(self, file_id):
         scene_id = self.scene_ids[file_id]
@@ -669,17 +575,23 @@ class WaymoProcessor:
             "fps": 10,  # assume all cameras have the same fps
         }
 
+        # Pre-load extrinsics for all cameras (used for computing cam_to_world)
+        extrinsics_all = {}
+        for cam_id in range(5):
+            extrinsics_all[cam_id] = np.loadtxt(f"{file_folder}/extrinsics/{cam_id}.txt")
+
         for t in range(num_timesteps):
             ego_pose = np.loadtxt(f"{file_folder}/ego_pose/{t:03d}.txt")
             scene_dict["ego_pose"].append(ego_pose.tolist())
             scene_dict["normalized_time"].append(t / scene_dict["fps"])
             for cam_id in range(5):
-                cam_to_world = np.loadtxt(f"{file_folder}/cam_to_world/{t:03d}_{cam_id}.txt")
+                # Compute cam_to_world = ego_pose @ extrinsics (instead of reading from file)
+                cam_to_world = ego_pose @ extrinsics_all[cam_id]
                 scene_dict["camera_to_world"][str(cam_id)].append(cam_to_world.tolist())
 
         for cam_id in range(5):
             fx, fy, cx, cy = np.loadtxt(f"{file_folder}/intrinsics/{cam_id}.txt")[:4]
-            extrinsics = np.loadtxt(f"{file_folder}/extrinsics/{cam_id}.txt")
+            extrinsics = extrinsics_all[cam_id]
             height = scene_dict["original_image_size"][str(cam_id)][0]
             width = scene_dict["original_image_size"][str(cam_id)][1]
             normalized_fx = fx / width
@@ -997,25 +909,14 @@ class WaymoProcessor:
             file_id (int): Current file index.
             frame_id (int): Current frame index.
         """
+        # Use the same (mature) logic as the other Waymo processor:
+        # only save ego pose per frame; do not force saving cam_to_world here.
         scene_id = self.scene_ids[file_id]
-        scene_path = f"{self.save_dir}/{str(scene_id).zfill(3)}"
-        ego_pose = np.array(frame.pose.transform).reshape(4, 4)
+        pose = np.array(frame.pose.transform).reshape(4, 4)
         np.savetxt(
-            f"{self.save_dir}/{str(scene_id).zfill(3)}/ego_pose/"
-            + f"{str(frame_id).zfill(3)}.txt",
-            ego_pose,
+            f"{self.save_dir}/{str(scene_id).zfill(3)}/ego_pose/" + f"{str(frame_id).zfill(3)}.txt",
+            pose,
         )
-        for cam_id in range(5):
-            cam_to_world_path = (
-                f"{scene_path}/cam_to_world/" + f"{str(frame_id).zfill(3)}_{str(cam_id)}.txt"
-            )
-            if not os.path.exists(cam_to_world_path):
-                extrinsics = np.loadtxt(
-                    f"{scene_path}/extrinsics/" + f"{str(cam_id)}.txt",
-                    dtype=np.float32,
-                )
-                cam_to_world = ego_pose @ extrinsics
-                np.savetxt(cam_to_world_path, cam_to_world)
 
     def save_dynamic_mask(self, frame, file_id, frame_id):
         """Parse and save the segmentation data.
@@ -1122,7 +1023,6 @@ class WaymoProcessor:
                 os.makedirs(f"{scene_path}/depth_flows{postfix}", exist_ok=True)
                 os.makedirs(f"{scene_path}/ground_label{postfix}", exist_ok=True)
             os.makedirs(f"{scene_path}/ego_pose", exist_ok=True)
-            os.makedirs(f"{scene_path}/cam_to_world", exist_ok=True)
             os.makedirs(f"{scene_path}/extrinsics", exist_ok=True)
             os.makedirs(f"{scene_path}/intrinsics", exist_ok=True)
             os.makedirs(f"{scene_path}/lidar", exist_ok=True)

@@ -26,22 +26,22 @@ pip install -r requirements_data.txt
 ```
 
 ## 3. Download the Raw Data
-For the Waymo Open Dataset, we first organize the scene names alphabetically and store them in `data/dataset_scene_list/waymo_val_list.txt`. The scene index is then determined by the line number minus one.
+For the Waymo Open Dataset, we first organize the scene names alphabetically and store them in `data/waymo_val_list.txt`. The scene index is then determined by the line number minus one.
 
 For example, you can download 3 sequences from the dataset by:
 
 ```bash
-python preproc/waymo_download.py \
+python datasets/waymo/waymo_download.py \
     --target_dir ./data/waymo/raw/validation \
-    --split_file data/dataset_scene_list/waymo_val_list.txt \
-    --scene_ids 700 754 23
+    --split_file  data/waymo_val_list.txt \
+    --scene_ids 8 23 150
 ```
 If you wish to run experiments on different scenes, please specify your own list of scenes.
 
 You can also omit the `scene_ids` to download all scenes specified in the `split_file`:
 
 ```bash
-python preproc/waymo_download.py \
+python datasets/waymo/waymo_download.py \
     --target_dir ./data/waymo/raw/validation \
     --split_file data/dataset_scene_list/waymo_val_list.txt
 ```
@@ -60,13 +60,13 @@ Download the [scene flow version](https://console.cloud.google.com/storage/brows
 ## 4.1 Preprocess the Data for Training
 Code for this section is coming soon!​
 
-## 4.2 Preprocess the Data for Iference/test
+## 4.2 Preprocess the Data for Inference/test (Quick Start)
 After downloading the raw dataset, you'll need to preprocess this compressed data to extract and organize various components.
 
 #### Run the Preprocessing Script
 To preprocess specific scenes of the dataset, use the following command:
 ```bash
-python preprocess.py \
+python datasets/preprocess_waymo.py \
     --data_root data/waymo/raw/ \
     --target_dir data/waymo/processed \
     --dataset waymo \
@@ -75,42 +75,96 @@ python preprocess.py \
     --scene_ids 700 754 23 \
     --num_workers 8 \
     --process_keys images lidar calib pose dynamic_masks ground \
-    --json_folder_to_save data/STORM_data/annotations/waymo 
+    --json_folder_to_save data/annotations/waymo 
 ```
 Alternatively, preprocess a batch of scenes by providing the split file:
 ```bash
-python preprocess.py \
+python datasets/preprocess_waymo.py \
     --data_root data/waymo/raw/ \
     --target_dir data/waymo/processed \
     --dataset waymo \
     --split validation \
-    --scene_list_file data/dataset_scene_list/waymo_val_list.txt \
+    --scene_list_file data/waymo_val_list.txt \
     --num_workers 8 \
     --process_keys images lidar calib pose dynamic_masks ground \
-    --json_folder_to_save data/STORM_data/annotations/waymo 
+    --json_folder_to_save data/annotations/waymo 
 ```
 The extracted data will be stored in the `data/waymo/processed` directory.
 
-## 5. Data Structure
+
+## 5. Extract Masks
+
+To generate:
+
+- **sky masks (required)** 
+- fine dynamic masks (optional)
+
+Follow these steps:
+
+#### Install `SegFormer` (Skip if already installed)
+
+:warning: SegFormer relies on `mmcv-full=1.2.7`, which relies on `pytorch=1.8` (pytorch<1.9). Hence, a seperate conda env is required.
+
+```shell
+#-- Set conda env
+conda create -n segformer python=3.8
+conda activate segformer
+# conda install pytorch==1.8.1 torchvision==0.9.1 torchaudio==0.8.1 cudatoolkit=11.3 -c pytorch -c conda-forge
+pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
+
+#-- Install mmcv-full
+pip install timm==0.3.2 pylint debugpy opencv-python-headless attrs ipython tqdm imageio scikit-image omegaconf
+pip install mmcv-full==1.2.7 --no-cache-dir
+
+#-- Clone and install segformer
+git clone https://github.com/NVlabs/SegFormer
+cd SegFormer
+pip install .
+```
+
+Download the pretrained model `segformer.b5.1024x1024.city.160k.pth` from the google_drive / one_drive links in https://github.com/NVlabs/SegFormer#evaluation .
+
+Remember the location where you download into, and pass it to the script in the next step with `--checkpoint` .
+
+
+#### Run Mask Extraction Script
+
+```shell
+conda activate segformer
+segformer_path=/path/to/segformer
+
+python datasets/tools/extract_masks.py \
+    --data_root data/waymo/processed/validation \
+    --segformer_path=$segformer_path \
+    --checkpoint=$segformer_path/pretrained/segformer.b5.1024x1024.city.160k.pth \
+    --split_file data/waymo_example_scenes.txt \
+    --process_dynamic_mask
+```
+Replace `/pathtosegformer` with the actual path to your Segformer installation.
+
+Note: The `--process_dynamic_mask` flag is included to process fine dynamic masks along with sky masks.
+
+This process will extract the required masks from your processed data.
+
+## 6. Data Structure
 After completing all preprocessing steps, the project files should be organized according to the following structure:
 ```bash
 ProjectPath/data/
   └── waymo/
-    ├── raw/
+    ├── raw/validation
     │    ├── segment-454855130179746819_4580_000_4600_000_with_camera_labels.tfrecord
     │    └── ...
     └── processed/
          └──validation/
               ├── 000/
-              │  ├──cam_to_ego/         # camera to ego-vehicle transformations: {cam_id}.txt
-              │  ├──cam_to_world/       # camera to world transformations: {timestep:03d}_{cam_id}.txt
+              │  ├──extrinsics/         # camera-to-ego (camera_to_ego) transformations: {cam_id}.txt
+              │  ├──intrinsics/         # camera intrinsics: {cam_id}.txt
+              │  ├──ego_pose/           # ego-vehicle to world transformations (4x4): {timestep:03d}.txt
               │  ├──depth_flows_4/      # downsampled (1/4) depth flow maps: {timestep:03d}_{cam_id}.npy
               │  ├──dynamic_masks/      # bounding-box-generated dynamic masks: {timestep:03d}_{cam_id}.png
-              │  ├──ego_to_world/       # ego-vehicle to world transformations: {timestep:03d}.txt
               │  ├──ground_label_4/     # downsampled (1/4) ground labels extracted from point cloud, used for flow evaluation only: {timestep:03d}.txt
               │  ├──images/             # original camera images: {timestep:03d}_{cam_id}.jpg
               │  ├──images_4/           # downsampled (1/4) camera images: {timestep:03d}_{cam_id}.jpg
-              │  ├──intrinsics/         # camera intrinsics: {cam_id}.txt
               │  ├──lidar/              # lidar data: {timestep:03d}.bin
               │  ├──sky_masks/          # sky masks: {timestep:03d}_{cam_id}.png
               ├── 001/
