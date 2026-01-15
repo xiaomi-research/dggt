@@ -57,10 +57,7 @@ Download the [scene flow version](https://console.cloud.google.com/storage/brows
 
 </details>
 
-## 4.1 Preprocess the Data for Training
-Code for this section is coming soon!​
-
-## 4.2 Preprocess the Data for Inference/test (Quick Start)
+## Preprocess the Data for Inference/test (Quick Start)
 After downloading the raw dataset, you'll need to preprocess this compressed data to extract and organize various components.
 
 #### Run the Preprocessing Script
@@ -77,6 +74,8 @@ python datasets/preprocess_waymo.py \
     --process_keys images lidar calib pose dynamic_masks ground \
     --json_folder_to_save data/annotations/waymo 
 ```
+ 
+
 Alternatively, preprocess a batch of scenes by providing the split file:
 ```bash
 python datasets/preprocess_waymo.py \
@@ -90,6 +89,11 @@ python datasets/preprocess_waymo.py \
     --json_folder_to_save data/annotations/waymo 
 ```
 The extracted data will be stored in the `data/waymo/processed` directory.
+
+
+<!-- ## Preprocess the Data for Training
+
+After performing the processing described above, the data still needs to be further processed to facilitate training (on the Waymo dataset). -->
 
 
 ## 5. Extract Masks

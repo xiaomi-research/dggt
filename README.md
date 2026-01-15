@@ -37,7 +37,7 @@ Our method introduces a fully pose-free feedforward framework **DGGT** for recon
 
 - [√] Release pre-trained checkpoints on  Waymo, NuScenes and Argoverse2
 - [√] Release the inference code of our model to facilitate further research and reproducibility.
-- [ ] Release the training code [after paper accepted]
+- [√] Release the training code
 
 
 ### 🚗 Dataset Support
@@ -47,7 +47,6 @@ This codebase provides support for Waymo Open Dataset, Nuscenes and Argoverse2. 
 | Waymo | [Data Process Instruction](datasets/Waymo.md) |
 | Argoverse2 | [Data Process Instruction](datasets/ArgoVerse2.md) |
 | NuScenes | [Data Process Instruction](datasets/NuScenes.md) |
-
 
 ## Installation
 ### Installing dependencies
@@ -110,6 +109,22 @@ python inference.py \
     -depth: A flag that, when specified, enables the output of depth maps in .npy format for each frame (optional).
     -metrics: A flag that, when specified, enables the output of evaluation metrics (PSNR, SSIM, LPIPS) after processing (optional).
     -diffusion: Whether to use diffusion model to optimize the rendered images (time-consuming) (optional).
+
+### Train
+<!-- You need to further process the training data according to the .md file in the data processing section.  -->
+And download vggt pretrained model [here](https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt) to `pretrained/model.pt`.
+
+You can train the model on the Waymo Open dataset.
+```bash
+torchrun --nproc_per_node=1 --master_port=0000 train.py \
+  --log_dir logs/xxx \
+  --ckpt_path /path/to/pretrained_checkpoint.pth 
+```
+
+    --image_dir <path>: Path to the Waymo dataset directory containing processed training data (required).
+    --log_dir <path>: Directory where training logs, checkpoints, and visualizations will be saved (required).
+    --ckpt_path <path>: Path to the pretrained model checkpoint to initialize weights (required).
+    --sequence_length <length>: Number of input frames for each training iteration, defaulting to 4 (optional).
 
 
 ### Zero-shot and trained experiment​s
