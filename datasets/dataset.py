@@ -57,7 +57,7 @@ def load_and_preprocess_flow(flow_path_list, extrinsic_paths, intrinsic_path, he
     return torch.stack(flows)
 
 
-def load_and_preprocess_images(image_path_list, mode="crop"):
+def load_and_preprocess_images(image_path_list, mode="crop", resample_method=Image.Resampling.BICUBIC):
     # Check for empty list
     if len(image_path_list) == 0:
         raise ValueError("At least 1 image is required")
@@ -91,7 +91,7 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
         new_height = round(height * (new_width / width) / 14) * 14
 
         # Resize with new dimensions (width, height)
-        img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
+        img = img.resize((new_width, new_height), resample_method)
         img = to_tensor(img)  # Convert to tensor (0, 1)
 
         if new_height > target_size:
@@ -350,13 +350,13 @@ class WaymoOpenDataset(Dataset):
             #sky masks
             if self.views == 1:
                 mask_seq = [sky_mask_paths[i] for i in indices]
-                masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                masks = load_and_preprocess_images(mask_seq, resample_method=Image.Resampling.NEAREST)  # [S, C, H, W]
             elif self.views == 3:
                 mask_seq = []
                 for i in indices:
                     for v in range(3):
                         mask_seq.append(sky_mask_paths[v][i])
-                masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
+                masks = load_and_preprocess_images(mask_seq, resample_method=Image.Resampling.NEAREST)  # [S*3, C, H, W]
 
             timestamps = np.array(indices) - start_idx
             timestamps = timestamps / timestamps[-1] * (self.sequence_length / 4)
@@ -426,13 +426,13 @@ class WaymoOpenDataset(Dataset):
             #sky masks
             if self.views == 1:
                 mask_seq = [sky_mask_paths[i] for i in indices]
-                masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                masks = load_and_preprocess_images(mask_seq, resample_method=Image.Resampling.NEAREST)  # [S, C, H, W]
             elif self.views == 3:
                 mask_seq = []
                 for i in indices:
                     for v in range(3):
                         mask_seq.append(sky_mask_paths[v][i])
-                masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
+                masks = load_and_preprocess_images(mask_seq, resample_method=Image.Resampling.NEAREST)  # [S*3, C, H, W]
                 
 
 
@@ -517,21 +517,21 @@ class WaymoOpenDataset(Dataset):
             # sky masks
             if self.views == 1:
                 mask_seq = [sky_mask_paths[i] for i in indices]
-                masks = load_and_preprocess_images(mask_seq)  # [S, C, H, W]
+                masks = load_and_preprocess_images(mask_seq, resample_method=Image.Resampling.NEAREST)  # [S, C, H, W]
                 target_mask_seq = [sky_mask_paths[i] for i in target_indices]
-                target_masks = load_and_preprocess_images(target_mask_seq)  # [T, C, H, W]
+                target_masks = load_and_preprocess_images(target_mask_seq, resample_method=Image.Resampling.NEAREST)  # [T, C, H, W]
             elif self.views == 3:
                 mask_seq = []
                 for i in indices:
                     for v in range(3):
                         mask_seq.append(sky_mask_paths[v][i])
-                masks = load_and_preprocess_images(mask_seq)  # [S*3, C, H, W]
+                masks = load_and_preprocess_images(mask_seq, resample_method=Image.Resampling.NEAREST)  # [S*3, C, H, W]
 
                 target_mask_seq = []
                 for i in target_indices:
                     for v in range(3):
                         target_mask_seq.append(sky_mask_paths[v][i])
-                target_masks = load_and_preprocess_images(target_mask_seq)  # [T*3, C, H, W]
+                target_masks = load_and_preprocess_images(target_mask_seq, resample_method=Image.Resampling.NEAREST)  # [T*3, C, H, W]
 
             input_dict = {
                 "images": images,
